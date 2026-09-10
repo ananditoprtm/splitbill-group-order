@@ -205,9 +205,28 @@
           body: JSON.stringify({ images: uploadedImages })
         });
 
-        const resData = await response.json();
+       // 1. Dapatkan teks respons mentah dulu
+        const rawResponse = await response.text(); 
+        
+        // 2. Coba parse sebagai JSON
+        let resData;
+        try {
+            resData = JSON.parse(rawResponse);
+        } catch (parseError) {
+             console.error("Raw response:", rawResponse);
+             throw new Error("Gagal membaca respons dari server (Bukan JSON). Cek console.");
+        }
 
-        if (!response.ok) throw new Error(resData.error || 'Gagal mengestrak data.');
+        // 3. Cek apakah ada error dari server atau Google API
+        if (!response.ok) {
+            const errorMessage = resData.error ? (resData.error.message || resData.error) : 'Gagal mengekstrak data.';
+            throw new Error(errorMessage);
+        }
+
+        // 4. Proses data sukses dari Gemini
+        if (!resData.candidates || resData.candidates.length === 0) {
+             throw new Error("AI tidak dapat menemukan data pada gambar.");
+        }
 
         const rawText = resData.candidates[0].content.parts[0].text;
         const cleanedText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
