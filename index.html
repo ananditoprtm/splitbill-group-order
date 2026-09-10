@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kalkulator Patungan Group Order</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-slate-100 min-h-screen text-slate-800 p-4 md:p-8">
+  <div class="max-w-4xl mx-auto space-y-6">
+    
+    <!-- Header -->
+    <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 text-center">
+      <h1 class="text-2xl md:text-3xl font-bold text-slate-900 flex items-center justify-center gap-2">
+        <i class="fa-solid fa-utensils text-orange-500"></i> Kalkulator Patungan Group Order
+      </h1>
+      <p class="text-slate-500 text-sm mt-1">Bagi tagihan ShopeeFood, GrabFood & GoFood secara adil dan akurat!</p>
+    </div>
+
+    <!-- Upload Struk AI -->
+    <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+      <h2 class="text-lg font-bold mb-3 flex items-center gap-2">
+        <i class="fa-solid fa-wand-magic-sparkles text-purple-600"></i> Scan Struk Otomatis (AI)
+      </h2>
+      
+      <div id="dropZone" class="border-2 border-dashed border-slate-300 rounded-xl p-6 text-center bg-slate-50 hover:bg-slate-100 transition cursor-pointer relative">
+        <input type="file" id="fileInput" multiple accept="image/*" class="hidden">
+        <i class="fa-solid fa-cloud-arrow-up text-3xl text-slate-400 mb-2"></i>
+        <p class="font-medium text-slate-700">Klik untuk pilih, seret gambar ke sini, atau <span class="text-purple-600 font-bold">Paste (Ctrl+V)</span></p>
+        <p class="text-xs text-slate-400 mt-1">Bisa upload beberapa screenshot bersambung sekaligus</p>
+      </div>
+
+      <div id="previewContainer" class="flex flex-wrap gap-3 mt-4"></div>
+
+      <button id="scanBtn" onclick="scanReceipt()" class="w-full mt-4 bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 rounded-xl transition flex items-center justify-center gap-2 disabled:opacity-50">
+        <i class="fa-solid fa-bolt"></i> Ekstrak Struk Otomatis
+      </button>
+    </div>
+
+    <!-- Form Input Item & Anggota -->
+    <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 space-y-4">
+      <div class="flex justify-between items-center">
+        <h2 class="text-lg font-bold flex items-center gap-2">
+          <i class="fa-solid fa-list-check text-blue-600"></i> Rincian Pesanan
+        </h2>
+        <button onclick="addItemRow()" class="text-sm bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-100 font-medium">
+          + Tambah Menu
+        </button>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm">
+          <thead>
+            <tr class="border-b text-slate-500">
+              <th class="pb-2">Pemesan</th>
+              <th class="pb-2">Nama Menu</th>
+              <th class="pb-2 w-20">Qty</th>
+              <th class="pb-2">Harga Satuan</th>
+              <th class="pb-2 w-10"></th>
+            </tr>
+          </thead>
+          <tbody id="itemTableBody" class="divide-y divide-slate-100">
+            <!-- Rows injected here -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Diskon & Extra Fee -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 mb-1">TOTAL DISKON / PROMO (Rp)</label>
+          <input type="number" id="totalDiscount" placeholder="0" oninput="calculate()" class="w-full border rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 mb-1">TOTAL BIAYA TAMBAHAN / ONGKIR (Rp)</label>
+          <input type="number" id="totalFees" placeholder="0" oninput="calculate()" class="w-full border rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+        </div>
+      </div>
+
+      <!-- Skema Pembagian -->
+      <div>
+        <label class="block text-xs font-semibold text-slate-500 mb-2">METODE PEMBAGIAN ONGKIR & LAYANAN</label>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="border rounded-xl p-3 flex items-center gap-2 cursor-pointer bg-slate-50 hover:bg-blue-50/50">
+            <input type="radio" name="splitMethod" value="proportional" checked onchange="calculate()" class="accent-blue-600">
+            <span class="text-xs md:text-sm font-medium">Proporsional (Sesuai Porsi)</span>
+          </label>
+          <label class="border rounded-xl p-3 flex items-center gap-2 cursor-pointer bg-slate-50 hover:bg-blue-50/50">
+            <input type="radio" name="splitMethod" value="equal" onchange="calculate()" class="accent-blue-600">
+            <span class="text-xs md:text-sm font-medium">Bagi Rata per Kepala</span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Output Hasil Kalkulasi -->
+    <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 space-y-4">
+      <h2 class="text-lg font-bold flex items-center gap-2">
+        <i class="fa-solid fa-calculator text-emerald-600"></i> Rincian Tagihan Per Orang
+      </h2>
+
+      <div id="summaryOutput" class="space-y-3">
+        <p class="text-sm text-slate-400 italic">Belum ada data menu yang diisi.</p>
+      </div>
+
+      <div class="pt-4 border-t flex flex-col md:flex-row justify-between items-center gap-4">
+        <div>
+          <span class="text-xs text-slate-400 block">TOTAL TAGIHAN AKHIR</span>
+          <span id="grandTotal" class="text-2xl font-black text-emerald-600">Rp 0</span>
+        </div>
+        <button onclick="copyToWhatsApp()" class="w-full md:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-6 py-3 rounded-xl transition flex items-center justify-center gap-2">
+          <i class="fa-brands fa-whatsapp text-lg"></i> Salin Rincian ke WhatsApp
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    let uploadedImages = [];
+
+    // Drag Drop & Paste Handlers
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+
+    dropZone.onclick = () => fileInput.click();
+    fileInput.onchange = (e) => handleFiles(e.target.files);
+
+    dropZone.ondragover = (e) => { e.preventDefault(); dropZone.classList.add('border-purple-500'); };
+    dropZone.ondragleave = () => dropZone.classList.remove('border-purple-500');
+    dropZone.ondrop = (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('border-purple-500');
+      handleFiles(e.dataTransfer.files);
+    };
+
+    document.onpaste = (e) => {
+      const items = e.clipboardData.items;
+      const files = [];
+      for (let item of items) {
+        if (item.type.indexOf('image') !== -1) files.push(item.getAsFile());
+      }
+      if (files.length > 0) handleFiles(files);
+    };
+
+    function handleFiles(files) {
+      for (let file of files) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          uploadedImages.push({
+            data: e.target.result.split(',')[1],
+            mimeType: file.type,
+            preview: e.target.result
+          });
+          renderPreviews();
+        };
+        reader.readAsDataURL(file);
+      }
+    }
+
+    function renderPreviews() {
+      const container = document.getElementById('previewContainer');
+      container.innerHTML = uploadedImages.map((img, index) => `
+        <div class="relative w-20 h-20 rounded-lg overflow-hidden border">
+          <img src="${img.preview}" class="w-full h-full object-cover">
+          <button onclick="removeImage(${index})" class="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center">×</button>
+        </div>
+      `).join('');
+    }
+
+    function removeImage(index) {
+      uploadedImages.splice(index, 1);
+      renderPreviews();
+    }
+
+    // Dynamic Form Table
+    function addItemRow(person = '', name = '', qty = 1, price = '') {
+      const tbody = document.getElementById('itemTableBody');
+      const tr = document.createElement('tr');
+      tr.className = 'item-row';
+      tr.innerHTML = `
+        <td class="py-2 pr-2"><input type="text" value="${person}" placeholder="Nama" class="item-person w-full border rounded-lg p-2 text-sm" oninput="calculate()"></td>
+        <td class="py-2 pr-2"><input type="text" value="${name}" placeholder="Menu" class="item-name w-full border rounded-lg p-2 text-sm" oninput="calculate()"></td>
+        <td class="py-2 pr-2"><input type="number" value="${qty}" min="1" class="item-qty w-full border rounded-lg p-2 text-sm" oninput="calculate()"></td>
+        <td class="py-2 pr-2"><input type="number" value="${price}" placeholder="0" class="item-price w-full border rounded-lg p-2 text-sm" oninput="calculate()"></td>
+        <td class="py-2"><button onclick="this.closest('tr').remove(); calculate();" class="text-slate-400 hover:text-red-500"><i class="fa-solid fa-trash"></i></button></td>
+      `;
+      tbody.appendChild(tr);
+      calculate();
+    }
+
+    // AI API Call via Netlify Function
+    async function scanReceipt() {
+      if (uploadedImages.length === 0) return alert('Silakan pilih/paste gambar struk terlebih dahulu!');
+
+      const btn = document.getElementById('scanBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Membaca Struk via AI...';
+
+      try {
+        const response = await fetch('/.netlify/functions/scan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ images: uploadedImages })
+        });
+
+        const resData = await response.json();
+
+        if (!response.ok) throw new Error(resData.error || 'Gagal mengestrak data.');
+
+        const rawText = resData.candidates[0].content.parts[0].text;
+        const cleanedText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+        const parsed = JSON.parse(cleanedText);
+
+        document.getElementById('itemTableBody').innerHTML = '';
+        if (parsed.items) {
+          parsed.items.forEach(item => addItemRow(item.person || '', item.name, item.qty, item.price));
+        }
+        if (parsed.discounts) document.getElementById('totalDiscount').value = parsed.discounts;
+        if (parsed.fees) document.getElementById('totalFees').value = parsed.fees;
+
+        calculate();
+        alert('Struk berhasil dibaca!');
+      } catch (err) {
+        alert('Error: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-bolt"></i> Ekstrak Struk Otomatis';
+      }
+    }
+
+    // Calculation Logic
+    function calculate() {
+      const rows = document.querySelectorAll('.item-row');
+      const items = [];
+      let subtotal = 0;
+
+      rows.forEach(row => {
+        const person = row.querySelector('.item-person').value.trim() || 'Tanpa Nama';
+        const name = row.querySelector('.item-name').value.trim() || 'Menu';
+        const qty = parseFloat(row.querySelector('.item-qty').value) || 1;
+        const price = parseFloat(row.querySelector('.item-price').value) || 0;
+
+        const itemSub = qty * price;
+        subtotal += itemSub;
+
+        items.push({ person, name, qty, price, itemSub });
+      });
+
+      const totalDiscount = parseFloat(document.getElementById('totalDiscount').value) || 0;
+      const totalFees = parseFloat(document.getElementById('totalFees').value) || 0;
+      const splitMethod = document.querySelector('input[name="splitMethod"]:checked').value;
+
+      // Group by Person
+      const people = {};
+      items.forEach(item => {
+        if (!people[item.person]) people[item.person] = { items: [], subtotal: 0 };
+        people[item.person].items.push(item);
+        people[item.person].subtotal += item.itemSub;
+      });
+
+      const personNames = Object.keys(people);
+      const personCount = personNames.length;
+
+      let grandTotal = 0;
+      let htmlOutput = '';
+
+      personNames.forEach(person => {
+        const pData = people[person];
+        let personDiscount = 0;
+        let personFee = 0;
+
+        if (subtotal > 0) {
+          // Proportionate discount
+          personDiscount = (pData.subtotal / subtotal) * totalDiscount;
+
+          // Fee allocation
+          if (splitMethod === 'proportional') {
+            personFee = (pData.subtotal / subtotal) * totalFees;
+          } else {
+            personFee = personCount > 0 ? totalFees / personCount : 0;
+          }
+        }
+
+        const personTotal = pData.subtotal - personDiscount + personFee;
+        grandTotal += personTotal;
+
+        htmlOutput += `
+          <div class="border rounded-xl p-4 bg-slate-50">
+            <div class="flex justify-between font-bold text-slate-800 pb-2 border-b">
+              <span>👤 ${person}</span>
+              <span class="text-emerald-600">Rp ${Math.round(personTotal).toLocaleString('id-ID')}</span>
+            </div>
+            <ul class="text-xs text-slate-600 mt-2 space-y-1">
+              ${pData.items.map(i => `<li>• ${i.name} (${i.qty}x) = Rp ${(i.qty * i.price).toLocaleString('id-ID')}</li>`).join('')}
+            </ul>
+          </div>
+        `;
+      });
+
+      document.getElementById('summaryOutput').innerHTML = htmlOutput || '<p class="text-sm text-slate-400 italic">Belum ada data menu yang diisi.</p>';
+      document.getElementById('grandTotal').innerText = `Rp ${Math.round(grandTotal).toLocaleString('id-ID')}`;
+    }
+
+    // Copy formatted text for WhatsApp
+    function copyToWhatsApp() {
+      const rows = document.querySelectorAll('.item-row');
+      if (rows.length === 0) return alert('Tidak ada data tagihan untuk disalin!');
+
+      const totalDiscount = parseFloat(document.getElementById('totalDiscount').value) || 0;
+      const totalFees = parseFloat(document.getElementById('totalFees').value) || 0;
+      const splitMethod = document.querySelector('input[name="splitMethod"]:checked').value;
+
+      let subtotal = 0;
+      const items = [];
+      rows.forEach(row => {
+        const person = row.querySelector('.item-person').value.trim() || 'Tanpa Nama';
+        const name = row.querySelector('.item-name').value.trim() || 'Menu';
+        const qty = parseFloat(row.querySelector('.item-qty').value) || 1;
+        const price = parseFloat(row.querySelector('.item-price').value) || 0;
+        const itemSub = qty * price;
+        subtotal += itemSub;
+        items.push({ person, name, qty, price, itemSub });
+      });
+
+      const people = {};
+      items.forEach(item => {
+        if (!people[item.person]) people[item.person] = { items: [], subtotal: 0 };
+        people[item.person].items.push(item);
+        people[item.person].subtotal += item.itemSub;
+      });
+
+      const personNames = Object.keys(people);
+      const personCount = personNames.length;
+      let text = `*RINCIAN PATUNGAN MAKAN BARENG* 🍱\n\n`;
+
+      personNames.forEach(person => {
+        const pData = people[person];
+        let personDiscount = 0;
+        let personFee = 0;
+
+        if (subtotal > 0) {
+          personDiscount = (pData.subtotal / subtotal) * totalDiscount;
+          if (splitMethod === 'proportional') {
+            personFee = (pData.subtotal / subtotal) * totalFees;
+          } else {
+            personFee = personCount > 0 ? totalFees / personCount : 0;
+          }
+        }
+
+        const personTotal = Math.round(pData.subtotal - personDiscount + personFee);
+
+        text += `👤 *${person}*\n`;
+        pData.items.forEach(i => {
+          text += `  • ${i.name} (${i.qty}x) : Rp ${(i.qty * i.price).toLocaleString('id-ID')}\n`;
+        });
+        text += `  👉 *Total Transfer: Rp ${personTotal.toLocaleString('id-ID')}*\n\n`;
+      });
+
+      text += `Silakan langsung ditransfer ke rekening / e-wallet biasa ya, terima kasih! 🙏`;
+
+      navigator.clipboard.writeText(text).then(() => {
+        alert('Rincian tagihan berhasil disalin ke clipboard! Tinggal paste di WhatsApp.');
+      });
+    }
+  </script>
+</body>
+</html>
