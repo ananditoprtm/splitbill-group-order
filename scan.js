@@ -1,6 +1,6 @@
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: 'Method Not Allowed' };
+    return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
   }
 
   try {
@@ -12,7 +12,12 @@ exports.handler = async (event) => {
       };
     }
 
-    const { images } = JSON.parse(event.body);
+    const body = JSON.parse(event.body);
+    const { images } = body;
+    
+    if (!images || images.length === 0) {
+        return { statusCode: 400, body: JSON.stringify({ error: 'Tidak ada gambar yang dikirim.' }) };
+    }
 
     const promptText = `
     Kamu adalah kasir/akuntan ekstraksi struk makanan.
@@ -45,9 +50,11 @@ exports.handler = async (event) => {
     const data = await googleResponse.json();
 
     if (!googleResponse.ok) {
+      // Mengirim kembali error dari Google API
       return { statusCode: googleResponse.status, body: JSON.stringify(data) };
     }
 
+    // Sukses
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
@@ -55,9 +62,10 @@ exports.handler = async (event) => {
     };
 
   } catch (err) {
+    // Tangkap error lainnya dan pastikan kembaliannya berupa JSON
     return { 
       statusCode: 500, 
-      body: JSON.stringify({ error: err.message || 'Terjadi kesalahan pada Server Netlify Function' }) 
+      body: JSON.stringify({ error: err.message || 'Terjadi kesalahan internal pada server' }) 
     };
   }
 };
