@@ -1,0 +1,8 @@
+{
+  "name": "splitbill-group-order",
+  "version": "1.0.0",
+  "description": "Kalkulator Patungan Group Order",
+  "scripts": {
+    "build": "echo 'Building static site...'"
+  }
+}
