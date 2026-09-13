@@ -136,7 +136,7 @@
     };
 
     document.onpaste = (e) => {
-      const items = e.clipboardData.items;
+      const items = e.clipboardData?.items || [];
       const files = [];
       for (let item of items) {
         if (item.type.indexOf('image') !== -1) files.push(item.getAsFile());
@@ -150,9 +150,8 @@
         reader.onload = (e) => {
           const img = new Image();
           img.onload = () => {
-            // Kompresi resolusi gambar agar tidak melebihi batas upload 6MB Netlify
             const canvas = document.createElement('canvas');
-            const MAX_WIDTH = 1024; // Resolusi ideal untuk Gemini OCR
+            const MAX_WIDTH = 1024;
             let width = img.width;
             let height = img.height;
 
@@ -166,7 +165,6 @@
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, width, height);
 
-            // Convert ke JPEG dengan kualitas 0.75
             const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.75);
             
             uploadedImages.push({
@@ -228,27 +226,21 @@
           body: JSON.stringify({ images: uploadedImages })
         });
 
-       // 1. Dapatkan teks respons mentah dulu
         const rawResponse = await response.text(); 
-        
-        // 2. Coba parse sebagai JSON
         let resData;
         try {
-            resData = JSON.parse(rawResponse);
+          resData = JSON.parse(rawResponse);
         } catch (parseError) {
-             console.error("Raw response:", rawResponse);
-             throw new Error("Gagal membaca respons dari server (Bukan JSON). Cek console.");
+          throw new Error("Gagal membaca respons dari server (Bukan JSON). Pastikan Netlify Function sudah aktif.");
         }
 
-        // 3. Cek apakah ada error dari server atau Google API
         if (!response.ok) {
-            const errorMessage = resData.error ? (resData.error.message || resData.error) : 'Gagal mengekstrak data.';
-            throw new Error(errorMessage);
+          const errorMessage = resData.error ? (resData.error.message || resData.error) : 'Gagal mengekstrak data.';
+          throw new Error(errorMessage);
         }
 
-        // 4. Proses data sukses dari Gemini
         if (!resData.candidates || resData.candidates.length === 0) {
-             throw new Error("AI tidak dapat menemukan data pada gambar.");
+          throw new Error("AI tidak dapat menemukan data pada gambar.");
         }
 
         const rawText = resData.candidates[0].content.parts[0].text;
@@ -273,165 +265,179 @@
     }
 
     // Calculation Logic
-   function calculate() {
-  const rows = document.querySelectorAll('#itemTableBody tr');
-  
-  let totalSubtotal = 0;
-  const rawItems = [];
+    function calculate() {
+      const rows = document.querySelectorAll('#itemTableBody tr');
+      let totalSubtotal = 0;
+      const rawItems = [];
 
-  // 1. Ambil data dari tabel UI
-  rows.forEach(row => {
-    const person = row.querySelector('.item-person')?.value.trim() || 'Tanpa Nama';
-    const name = row.querySelector('.item-name')?.value.trim() || 'Menu';
-    const qty = parseFloat(row.querySelector('.item-qty')?.value) || 0;
-    const price = parseFloat(row.querySelector('.item-price')?.value) || 0;
+      rows.forEach(row => {
+        const person = row.querySelector('.item-person')?.value.trim() || 'Tanpa Nama';
+        const name = row.querySelector('.item-name')?.value.trim() || 'Menu';
+        const qty = parseFloat(row.querySelector('.item-qty')?.value) || 0;
+        const price = parseFloat(row.querySelector('.item-price')?.value) || 0;
 
-    const itemSubtotal = qty * price;
-    totalSubtotal += itemSubtotal;
+        const itemSubtotal = qty * price;
+        totalSubtotal += itemSubtotal;
 
-    if (qty > 0 && price > 0) {
-      rawItems.push({ person, name, qty, itemSubtotal });
-    }
-  });
+        if (qty > 0 && price > 0) {
+          rawItems.push({ person, name, qty, price, itemSubtotal });
+        }
+      });
 
-  const discounts = parseFloat(document.getElementById('totalDiscount')?.value) || 0;
-  const fees = parseFloat(document.getElementById('totalFees')?.value) || 0;
+      const discounts = parseFloat(document.getElementById('totalDiscount')?.value) || 0;
+      const fees = parseFloat(document.getElementById('totalFees')?.value) || 0;
+      const splitMethod = document.querySelector('input[name="splitMethod"]:checked')?.value || 'proportional';
 
-  // 2. Hitung multiplier diskon/ongkir per rupiah
-  const totalNet = totalSubtotal - discounts + fees;
-  const multiplier = totalSubtotal > 0 ? (totalNet / totalSubtotal) : 1;
+      const totalNet = totalSubtotal - discounts + fees;
+      const personGroup = {};
 
-  // 3. Kelompokkan per Orang
-  const personTotals = {};
+      if (splitMethod === 'proportional') {
+        const multiplier = totalSubtotal > 0 ? (totalNet / totalSubtotal) : 1;
+        rawItems.forEach(item => {
+          if (!personGroup[item.person]) personGroup[item.person] = { total: 0, items: [] };
+          const itemNetTotal = Math.round(item.itemSubtotal * multiplier);
+          personGroup[item.person].total += itemNetTotal;
+          personGroup[item.person].items.push({ ...item, itemNetTotal });
+        });
+      } else {
+        const uniquePersons = [...new Set(rawItems.map(i => i.person))];
+        const personCount = uniquePersons.length || 1;
+        const netAdjustmentPerPerson = (-discounts + fees) / personCount;
 
-  rawItems.forEach(item => {
-    const itemNetTotal = Math.round(item.itemSubtotal * multiplier);
-    
-    if (!personTotals[item.person]) {
-      personTotals[item.person] = 0;
-    }
-    personTotals[item.person] += itemNetTotal;
-  });
+        rawItems.forEach(item => {
+          if (!personGroup[item.person]) personGroup[item.person] = { total: 0, items: [] };
+          personGroup[item.person].items.push({ ...item, itemNetTotal: item.itemSubtotal });
+          personGroup[item.person].total += item.itemSubtotal;
+        });
 
-  // 4. Update Ringkasan Total di Layar Web
-  const summaryList = document.getElementById('personSummaryList');
-  if (summaryList) {
-    summaryList.innerHTML = '';
-    for (const [person, total] of Object.entries(personTotals)) {
-      const li = document.createElement('li');
-      li.className = 'flex justify-between items-center py-1 border-b';
-      li.innerHTML = `<span><strong>${person}</strong></span> <span>Rp ${total.toLocaleString('id-ID')}</span>`;
-      summaryList.appendChild(li);
-    }
-  }
+        uniquePersons.forEach(person => {
+          if (personGroup[person]) {
+            personGroup[person].total += netAdjustmentPerPerson;
+          }
+        });
+      }
 
-  // Update total keseluruhan di layar
-  const grandTotalEl = document.getElementById('grandTotal');
-  if (grandTotalEl) {
-    grandTotalEl.innerText = `Rp ${Math.round(totalNet).toLocaleString('id-ID')}`;
-  }
-}
+      let htmlOutput = '';
+      let calculatedGrandTotal = 0;
+
+      for (const [person, data] of Object.entries(personGroup)) {
+        calculatedGrandTotal += data.total;
         htmlOutput += `
           <div class="border rounded-xl p-4 bg-slate-50">
             <div class="flex justify-between font-bold text-slate-800 pb-2 border-b">
               <span>👤 ${person}</span>
-              <span class="text-emerald-600">Rp ${Math.round(personTotal).toLocaleString('id-ID')}</span>
+              <span class="text-emerald-600">Rp ${Math.round(data.total).toLocaleString('id-ID')}</span>
             </div>
-           <ul class="text-xs text-slate-600 mt-2 space-y-1">
-              ${pData.items.map(i => {
-                const itemNetTotal = Math.round((i.qty * i.price) * (pData.multiplier || 1));
-                const netPerQty = Math.round(itemNetTotal / i.qty);
+            <ul class="text-xs text-slate-600 mt-2 space-y-1">
+              ${data.items.map(i => {
+                const netPerQty = Math.round(i.itemNetTotal / i.qty);
                 return i.qty > 1 
-                  ? `<li>• ${i.name} (${i.qty}x) @ Rp ${netPerQty.toLocaleString('id-ID')} = Rp ${itemNetTotal.toLocaleString('id-ID')}</li>`
-                  : `<li>• ${i.name} (1x) : Rp ${itemNetTotal.toLocaleString('id-ID')}</li>`;
+                  ? `<li>• ${i.name} (${i.qty}x) @ Rp ${netPerQty.toLocaleString('id-ID')} = Rp ${Math.round(i.itemNetTotal).toLocaleString('id-ID')}</li>`
+                  : `<li>• ${i.name} (1x) : Rp ${Math.round(i.itemNetTotal).toLocaleString('id-ID')}</li>`;
               }).join('')}
             </ul>
           </div>
         `;
-      });
+      }
 
-      document.getElementById('summaryOutput').innerHTML = htmlOutput || '<p class="text-sm text-slate-400 italic">Belum ada data menu yang diisi.</p>';
-      document.getElementById('grandTotal').innerText = `Rp ${Math.round(grandTotal).toLocaleString('id-ID')}`;
-    }
+      const summaryOutput = document.getElementById('summaryOutput');
+      if (summaryOutput) {
+        summaryOutput.innerHTML = htmlOutput || '<p class="text-sm text-slate-400 italic">Belum ada data menu yang diisi.</p>';
+      }
 
-    // Copy formatted text for WhatsApp
-    function generateWhatsAppText() {
-  const rows = document.querySelectorAll('#itemTableBody tr');
-  
-  let totalSubtotal = 0;
-  const rawItems = [];
-
-  // 1. Kumpulkan semua item
-  rows.forEach(row => {
-    const person = row.querySelector('.item-person')?.value.trim() || 'Tanpa Nama';
-    const name = row.querySelector('.item-name')?.value.trim() || 'Menu';
-    const qty = parseFloat(row.querySelector('.item-qty')?.value) || 0;
-    const price = parseFloat(row.querySelector('.item-price')?.value) || 0;
-
-    const itemSubtotal = qty * price;
-    totalSubtotal += itemSubtotal;
-
-    if (qty > 0 && price > 0) {
-      rawItems.push({ person, name, qty, itemSubtotal });
-    }
-  });
-
-  const discounts = parseFloat(document.getElementById('totalDiscount')?.value) || 0;
-  const fees = parseFloat(document.getElementById('totalFees')?.value) || 0;
-
-  // 2. Hitung multiplier (faktor pengali) untuk membagi diskon/ongkir secara adil
-  const totalNet = totalSubtotal - discounts + fees;
-  const multiplier = totalSubtotal > 0 ? (totalNet / totalSubtotal) : 1;
-
-  // 3. Kelompokkan per Orang dan Gabungkan Menu yang sama
-  const groupedData = {};
-
-  rawItems.forEach(item => {
-    if (!groupedData[item.person]) {
-      groupedData[item.person] = { items: {} };
-    }
-
-    if (groupedData[item.person].items[item.name]) {
-      groupedData[item.person].items[item.name].qty += item.qty;
-      groupedData[item.person].items[item.name].baseSubtotal += item.itemSubtotal;
-    } else {
-      groupedData[item.person].items[item.name] = {
-        qty: item.qty,
-        baseSubtotal: item.itemSubtotal
-      };
-    }
-  });
-
-  // 4. Buat Teks Rinciannya
-  let text = `*RINCIAN PATUNGAN MAKAN BARENG* 🍱\n\n`;
-
-  for (const [person, data] of Object.entries(groupedData)) {
-    text += `👤 *${person}*\n`;
-    let personTotalNet = 0;
-    
-    for (const [menuName, menuInfo] of Object.entries(data.items)) {
-      // Hitung Total Netto untuk sekumpulan menu ini
-      const itemNetTotal = Math.round(menuInfo.baseSubtotal * multiplier);
-      personTotalNet += itemNetTotal;
-
-      // Hitung Harga Netto PER 1 QTY (Ini yang kamu cari!)
-      const netPerQty = Math.round(itemNetTotal / menuInfo.qty);
-
-      if (menuInfo.qty > 1) {
-        // Tampilkan penjabaran harga per 1 porsi jika qty lebih dari 1
-        text += `  • ${menuName} (${menuInfo.qty}x) @ Rp ${netPerQty.toLocaleString('id-ID')} = Rp ${itemNetTotal.toLocaleString('id-ID')}\n`;
-      } else {
-        // Jika cuma pesan 1, langsung tampilkan totalnya
-        text += `  • ${menuName} (1x) : Rp ${itemNetTotal.toLocaleString('id-ID')}\n`;
+      const grandTotalEl = document.getElementById('grandTotal');
+      if (grandTotalEl) {
+        grandTotalEl.innerText = `Rp ${Math.round(calculatedGrandTotal > 0 ? calculatedGrandTotal : totalNet).toLocaleString('id-ID')}`;
       }
     }
 
-    text += `  👉 *Total Transfer: Rp ${personTotalNet.toLocaleString('id-ID')}*\n\n`;
-  }
+    function copyToWhatsApp() {
+      const text = generateWhatsAppText();
+      navigator.clipboard.writeText(text).then(() => {
+        alert('Rincian tagihan berhasil disalin ke clipboard!');
+      }).catch(err => {
+        alert('Gagal menyalin teks: ' + err);
+      });
+    }
 
-  text += `Silakan langsung ditransfer ke rekening / e-wallet biasa ya, terima kasih! 🙏`;
+    function generateWhatsAppText() {
+      const rows = document.querySelectorAll('#itemTableBody tr');
+      let totalSubtotal = 0;
+      const rawItems = [];
 
-  return text;
-}  </script>
+      rows.forEach(row => {
+        const person = row.querySelector('.item-person')?.value.trim() || 'Tanpa Nama';
+        const name = row.querySelector('.item-name')?.value.trim() || 'Menu';
+        const qty = parseFloat(row.querySelector('.item-qty')?.value) || 0;
+        const price = parseFloat(row.querySelector('.item-price')?.value) || 0;
+
+        const itemSubtotal = qty * price;
+        totalSubtotal += itemSubtotal;
+
+        if (qty > 0 && price > 0) {
+          rawItems.push({ person, name, qty, price, itemSubtotal });
+        }
+      });
+
+      const discounts = parseFloat(document.getElementById('totalDiscount')?.value) || 0;
+      const fees = parseFloat(document.getElementById('totalFees')?.value) || 0;
+      const splitMethod = document.querySelector('input[name="splitMethod"]:checked')?.value || 'proportional';
+
+      const totalNet = totalSubtotal - discounts + fees;
+      const multiplier = (splitMethod === 'proportional' && totalSubtotal > 0) ? (totalNet / totalSubtotal) : 1;
+
+      const groupedData = {};
+      rawItems.forEach(item => {
+        if (!groupedData[item.person]) groupedData[item.person] = { items: {} };
+        if (groupedData[item.person].items[item.name]) {
+          groupedData[item.person].items[item.name].qty += item.qty;
+          groupedData[item.person].items[item.name].baseSubtotal += item.itemSubtotal;
+        } else {
+          groupedData[item.person].items[item.name] = {
+            qty: item.qty,
+            baseSubtotal: item.itemSubtotal
+          };
+        }
+      });
+
+      let text = `*RINCIAN PATUNGAN MAKAN BARENG* 🍱\n\n`;
+      const uniquePersons = Object.keys(groupedData);
+      const equalAdjustment = (splitMethod === 'equal' && uniquePersons.length > 0) 
+        ? (-discounts + fees) / uniquePersons.length 
+        : 0;
+
+      for (const [person, data] of Object.entries(groupedData)) {
+        text += `👤 *${person}*\n`;
+        let personTotalNet = 0;
+        
+        for (const [menuName, menuInfo] of Object.entries(data.items)) {
+          const itemNetTotal = splitMethod === 'proportional' 
+            ? Math.round(menuInfo.baseSubtotal * multiplier)
+            : menuInfo.baseSubtotal;
+            
+          personTotalNet += itemNetTotal;
+          const netPerQty = Math.round(itemNetTotal / menuInfo.qty);
+
+          if (menuInfo.qty > 1) {
+            text += `  • ${menuName} (${menuInfo.qty}x) @ Rp ${netPerQty.toLocaleString('id-ID')} = Rp ${Math.round(itemNetTotal).toLocaleString('id-ID')}\n`;
+          } else {
+            text += `  • ${menuName} (1x) : Rp ${Math.round(itemNetTotal).toLocaleString('id-ID')}\n`;
+          }
+        }
+
+        if (splitMethod === 'equal') {
+          personTotalNet += equalAdjustment;
+        }
+
+        text += `  👉 *Total Transfer: Rp ${Math.round(personTotalNet).toLocaleString('id-ID')}*\n\n`;
+      }
+
+      text += `Silakan langsung ditransfer ya, terima kasih! 🙏`;
+      return text;
+    }
+
+    // Tampilkan 1 baris input pertama saat awal dimuat
+    addItemRow();
+  </script>
 </body>
 </html>
